@@ -1,6 +1,5 @@
 import re
 import string
-from typing import Annotated as Gridded  # noqa
 from typing import Any, Callable, Dict, List, Tuple, get_type_hints
 
 import xarray as xr
@@ -55,6 +54,7 @@ def _parse_grid_ufunc_signature(
     signature = signature.replace(" ", "")
 
     if not re.match(_SIGNATURE, signature):
+        print(signature)
         raise ValueError(f"Not a valid grid ufunc signature: {signature}")
 
     in_txt, out_txt = signature.split("->")

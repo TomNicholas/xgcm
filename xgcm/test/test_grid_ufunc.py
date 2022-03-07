@@ -1,5 +1,5 @@
 import re
-from typing import Tuple, cast
+from typing import Annotated, Tuple, cast
 
 import numpy as np
 import pytest
@@ -8,7 +8,6 @@ from xarray.testing import assert_equal
 
 from xgcm.grid import Grid, _select_grid_ufunc
 from xgcm.grid_ufunc import (
-    Gridded,
     GridUFunc,
     _parse_grid_ufunc_signature,
     _signatures_equivalent,
@@ -95,21 +94,21 @@ class TestGetSignatureFromTypeHints:
         # TODO test hints with annotations that don't conform to Xgcm
 
         @as_grid_ufunc()
-        def ufunc(a: Gridded[xr.DataArray, "X:center"]):
+        def ufunc(a: Annotated[xr.DataArray, "X:center"]):
             ...
 
         assert ufunc.signature == "(X:center)->()"
 
         @as_grid_ufunc()
-        def ufunc(a: Gridded[xr.DataArray, "X:center,Y:center"]):
+        def ufunc(a: Annotated[xr.DataArray, "X:center,Y:center"]):
             ...
 
         assert ufunc.signature == "(X:center,Y:center)->()"
 
         @as_grid_ufunc()
         def ufunc(
-            a: Gridded[xr.DataArray, "X:left"],
-            b: Gridded[xr.DataArray, "Y:right"],
+            a: Annotated[xr.DataArray, "X:left"],
+            b: Annotated[xr.DataArray, "Y:right"],
         ):
             ...
 
@@ -117,20 +116,20 @@ class TestGetSignatureFromTypeHints:
 
     def test_annotated_return_args(self):
         @as_grid_ufunc()
-        def ufunc() -> Gridded[xr.DataArray, "X:center"]:
+        def ufunc() -> Annotated[xr.DataArray, "X:center"]:
             ...
 
         assert ufunc.signature == "()->(X:center)"
 
         @as_grid_ufunc()
-        def ufunc() -> Gridded[xr.DataArray, "X:left,Y:right"]:
+        def ufunc() -> Annotated[xr.DataArray, "X:left,Y:right"]:
             ...
 
         assert ufunc.signature == "()->(X:left,Y:right)"
 
         @as_grid_ufunc()
         def ufunc() -> Tuple[
-            Gridded[xr.DataArray, "X:left"], Gridded[xr.DataArray, "Y:right"]
+            Annotated[xr.DataArray, "X:left"], Annotated[xr.DataArray, "Y:right"]
         ]:
             ...
 
@@ -138,8 +137,8 @@ class TestGetSignatureFromTypeHints:
 
         @as_grid_ufunc()
         def ufunc(
-            a: Gridded[xr.DataArray, "X:center"]
-        ) -> Gridded[xr.DataArray, "X:left"]:
+            a: Annotated[xr.DataArray, "X:center"]
+        ) -> Annotated[xr.DataArray, "X:left"]:
             ...
 
         assert ufunc.signature == "(X:center)->(X:left)"
@@ -151,7 +150,7 @@ class TestGetSignatureFromTypeHints:
         ):
 
             @as_grid_ufunc()
-            def ufunc(a: Gridded[xr.DataArray, "(X:Mars)"]):
+            def ufunc(a: Annotated[xr.DataArray, "(X:Mars)"]):
                 ...
 
     @pytest.mark.xfail
@@ -161,7 +160,7 @@ class TestGetSignatureFromTypeHints:
         ):
 
             @as_grid_ufunc()
-            def ufunc() -> Gridded[xr.DataArray, "(X:Venus)"]:
+            def ufunc() -> Annotated[xr.DataArray, "(X:Venus)"]:
                 ...
 
     def test_both_sig_kwarg_and_hints_given(self):
@@ -171,19 +170,19 @@ class TestGetSignatureFromTypeHints:
 
             @as_grid_ufunc(signature="(X:center)->(X:left)")
             def ufunc(
-                a: Gridded[xr.DataArray, "(X:center)"]
-            ) -> Gridded[xr.DataArray, "(X:left)"]:
+                a: Annotated[xr.DataArray, "(X:center)"]
+            ) -> Annotated[xr.DataArray, "(X:left)"]:
                 ...
 
     def test_type_hint_as_numpy_ndarray(self):
         # This should fail mypy
         @as_grid_ufunc()
-        def ufunc(a: Gridded[str, "(X:Mars)"]):
+        def ufunc(a: Annotated[str, "(X:Mars)"]):
             cast(a, np.ndarray)
 
         # This should pass mypy
         @as_grid_ufunc()
-        def ufunc(a: Gridded[np.ndarray, "(X:Mars)"]):
+        def ufunc(a: Annotated[np.ndarray, "(X:Mars)"]):
             cast(a, np.ndarray)
 
 
@@ -265,8 +264,8 @@ class TestGridUFunc:
 
         @as_grid_ufunc()
         def diff_center_to_left(
-            a: Gridded[np.ndarray, "X:center"]
-        ) -> Gridded[np.ndarray, "X:left"]:
+            a: Annotated[np.ndarray, "X:center"]
+        ) -> Annotated[np.ndarray, "X:left"]:
             return a - np.roll(a, shift=-1)
 
         assert isinstance(diff_center_to_left, GridUFunc)
@@ -284,20 +283,14 @@ class TestGridUFunc:
 
         with pytest.raises(
             ValueError,
-            match=re.escape("Axis:positions pair depth:outer does not exist"),
+            match=re.escape("Axis position (depth:outer) does not exist in grid"),
         ):
-            da: Gridded[xr.DataArray, "X:outer"]
-            apply_as_grid_ufunc(
-                lambda x: x, da, axis=[("depth",)], grid=grid, signature="(X:outer)->()"
-            )
-
-        with pytest.raises(ValueError, match="coordinate depth_c does not appear"):
-            da: Gridded[xr.DataArray, "X:center"]
             apply_as_grid_ufunc(
                 lambda x: x,
                 da,
                 axis=[("depth",)],
                 grid=grid,
+                signature="(X:outer)->(X:outer)",
             )
 
     def test_1d_unchanging_size_no_dask(self):
@@ -314,31 +307,29 @@ class TestGridUFunc:
         )
 
         # Test direct application
-        da: Gridded[xr.DataArray, "X:center"]
         result = apply_as_grid_ufunc(
             diff_center_to_left,
             da,
             axis=[("depth",)],
             grid=grid,
-            return_grid="X:left",
+            signature="(X:center)->(X:left)",
         )
         assert_equal(result, expected)
 
         # Test Grid method
-        da: Gridded[xr.DataArray, "X:center"]
         result = grid.apply_as_grid_ufunc(
             diff_center_to_left,
             da,
             axis=[("depth",)],
-            return_grid="X:left",
+            signature="(X:center)->(X:left)",
         )
         assert_equal(result, expected)
 
         # Test decorator
         @as_grid_ufunc()
         def diff_center_to_left(
-            a: Gridded[np.ndarray, "X:left"]
-        ) -> Gridded[np.ndarray, "X:left"]:
+            a: Annotated[np.ndarray, "X:center"]
+        ) -> Annotated[np.ndarray, "X:left"]:
             return a - np.roll(a, shift=-1)
 
         result = diff_center_to_left(grid, da, axis=[("depth",)])
