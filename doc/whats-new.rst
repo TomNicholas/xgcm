@@ -17,6 +17,8 @@ Breaking Changes
 Internal Changes
 ~~~~~~~~~~~~~~~~
 
+- Fix type hinting to be compatible with mypy v0.990. (:pull:`415`, :issue:`507`)
+  By `Thomas Nicholas <https://github.com/tomnicholas>`_.
 
 Documentation
 ~~~~~~~~~~~~~
